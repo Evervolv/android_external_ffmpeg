@@ -69,7 +69,7 @@ static int query_formats(AVFilterContext *ctx)
 
 #define ABS(a) (((a) ^ ((a) >> 31)) - ((a) >> 31))
 
-static int diff_c(const uint8_t *a, const uint8_t *b, int s)
+static int diff_c(const uint8_t *a, const uint8_t *b, ptrdiff_t s)
 {
     int i, j, diff = 0;
 
@@ -83,7 +83,7 @@ static int diff_c(const uint8_t *a, const uint8_t *b, int s)
     return diff;
 }
 
-static int comb_c(const uint8_t *a, const uint8_t *b, int s)
+static int comb_c(const uint8_t *a, const uint8_t *b, ptrdiff_t s)
 {
     int i, j, comb = 0;
 
@@ -98,7 +98,7 @@ static int comb_c(const uint8_t *a, const uint8_t *b, int s)
     return comb;
 }
 
-static int var_c(const uint8_t *a, const uint8_t *b, int s)
+static int var_c(const uint8_t *a, const uint8_t *b, ptrdiff_t s)
 {
     int i, j, var = 0;
 
@@ -235,6 +235,8 @@ static int alloc_buffer(PullupContext *s, PullupBuffer *b)
     for (i = 0; i < s->nb_planes; i++) {
         b->planes[i] = av_malloc(s->planeheight[i] * s->planewidth[i]);
     }
+    if (s->nb_planes == 1)
+        b->planes[1] = av_malloc(4*256);
 
     return 0;
 }
@@ -508,7 +510,7 @@ static void pullup_release_frame(PullupFrame *f)
 
 static void compute_metric(PullupContext *s, int *dest,
                            PullupField *fa, int pa, PullupField *fb, int pb,
-                           int (*func)(const uint8_t *, const uint8_t *, int))
+                           int (*func)(const uint8_t *, const uint8_t *, ptrdiff_t))
 {
     int mp = s->metric_plane;
     int xstep = 8;
