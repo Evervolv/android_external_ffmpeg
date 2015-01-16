@@ -355,9 +355,9 @@ static inline void yuvPlanartoyuy2_c(const uint8_t *ysrc, const uint8_t *usrc,
         const uint8_t *yc = ysrc, *uc = usrc, *vc = vsrc;
         for (i = 0; i < chromWidth; i += 2) {
             uint64_t k = yc[0] + (uc[0] << 8) +
-                         (yc[1] << 16) + (unsigned)(vc[0] << 24);
+                         (yc[1] << 16) + ((unsigned) vc[0] << 24);
             uint64_t l = yc[2] + (uc[1] << 8) +
-                         (yc[3] << 16) + (unsigned)(vc[1] << 24);
+                         (yc[3] << 16) + ((unsigned) vc[1] << 24);
             *ldst++ = k + (l << 32);
             yc     += 4;
             uc     += 2;
@@ -419,9 +419,9 @@ static inline void yuvPlanartouyvy_c(const uint8_t *ysrc, const uint8_t *usrc,
         const uint8_t *yc = ysrc, *uc = usrc, *vc = vsrc;
         for (i = 0; i < chromWidth; i += 2) {
             uint64_t k = uc[0] + (yc[0] << 8) +
-                         (vc[0] << 16) + (unsigned)(yc[1] << 24);
+                         (vc[0] << 16) + ((unsigned) yc[1] << 24);
             uint64_t l = uc[1] + (yc[2] << 8) +
-                         (vc[1] << 16) + (unsigned)(yc[3] << 24);
+                         (vc[1] << 16) + ((unsigned) yc[3] << 24);
             *ldst++ = k + (l << 32);
             yc     += 4;
             uc     += 2;
@@ -693,6 +693,24 @@ static void interleaveBytes_c(const uint8_t *src1, const uint8_t *src2,
     }
 }
 
+static void deinterleaveBytes_c(const uint8_t *src, uint8_t *dst1, uint8_t *dst2,
+                                int width, int height, int srcStride,
+                                int dst1Stride, int dst2Stride)
+{
+    int h;
+
+    for (h = 0; h < height; h++) {
+        int w;
+        for (w = 0; w < width; w++) {
+            dst1[w] = src[2 * w + 0];
+            dst2[w] = src[2 * w + 1];
+        }
+        src  += srcStride;
+        dst1 += dst1Stride;
+        dst2 += dst2Stride;
+    }
+}
+
 static inline void vu9_to_vu12_c(const uint8_t *src1, const uint8_t *src2,
                                  uint8_t *dst1, uint8_t *dst2,
                                  int width, int height,
@@ -922,6 +940,7 @@ static av_cold void rgb2rgb_init_c(void)
     planar2x           = planar2x_c;
     ff_rgb24toyv12     = ff_rgb24toyv12_c;
     interleaveBytes    = interleaveBytes_c;
+    deinterleaveBytes  = deinterleaveBytes_c;
     vu9_to_vu12        = vu9_to_vu12_c;
     yvu9_to_yuy2       = yvu9_to_yuy2_c;
 

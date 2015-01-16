@@ -126,6 +126,23 @@ static int alloc_metrics(PullupContext *s, PullupField *f)
     return 0;
 }
 
+static void free_field_queue(PullupField *head)
+{
+    PullupField *f = head;
+    do {
+        PullupField *next;
+        if (!f)
+            break;
+        av_free(f->diffs);
+        av_free(f->combs);
+        av_free(f->vars);
+        next = f->next;
+        memset(f, 0, sizeof(*f)); // clear all pointers to avoid stale ones
+        av_free(f);
+        f = next;
+    } while (f != head);
+}
+
 static PullupField *make_field_queue(PullupContext *s, int len)
 {
     PullupField *head, *f;
@@ -141,13 +158,17 @@ static PullupField *make_field_queue(PullupContext *s, int len)
 
     for (; len > 0; len--) {
         f->next = av_mallocz(sizeof(*f->next));
-        if (!f->next)
+        if (!f->next) {
+            free_field_queue(head);
             return NULL;
+        }
 
         f->next->prev = f;
         f = f->next;
-        if (alloc_metrics(s, f) < 0)
+        if (alloc_metrics(s, f) < 0) {
+            free_field_queue(head);
             return NULL;
+        }
     }
 
     f->next = head;
@@ -368,8 +389,8 @@ static void compute_affinity(PullupContext *s, PullupField *f)
         int v  = f->vars[i];
         int lv = f->prev->vars[i];
         int rv = f->next->vars[i];
-        int lc = f->combs[i] - (v + lv) + ABS(v - lv);
-        int rc = f->next->combs[i] - (v + rv) + ABS(v - rv);
+        int lc = f->      combs[i] - 2*(v < lv ? v : lv);
+        int rc = f->next->combs[i] - 2*(v < rv ? v : rv);
 
         lc = FFMAX(lc, 0);
         rc = FFMAX(rc, 0);
@@ -716,21 +737,10 @@ end:
 static av_cold void uninit(AVFilterContext *ctx)
 {
     PullupContext *s = ctx->priv;
-    PullupField *f;
     int i;
 
-    f = s->head;
-    while (f) {
-        av_free(f->diffs);
-        av_free(f->combs);
-        av_free(f->vars);
-        if (f == s->last) {
-            av_freep(&s->last);
-            break;
-        }
-        f = f->next;
-        av_freep(&f->prev);
-    };
+    free_field_queue(s->head);
+    s->last = NULL;
 
     for (i = 0; i < FF_ARRAY_ELEMS(s->buffers); i++) {
         av_freep(&s->buffers[i].planes[0]);
@@ -758,7 +768,7 @@ static const AVFilterPad pullup_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vf_pullup = {
+AVFilter ff_vf_pullup = {
     .name          = "pullup",
     .description   = NULL_IF_CONFIG_SMALL("Pullup from field sequence to frames."),
     .priv_size     = sizeof(PullupContext),

@@ -86,7 +86,7 @@ static int query_formats(AVFilterContext *ctx)
     AVFilterFormats *formats = NULL;
     int fmt;
 
-    for (fmt = 0; fmt < AV_PIX_FMT_NB; fmt++) {
+    for (fmt = 0; av_pix_fmt_desc_get(fmt); fmt++) {
         const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(fmt);
         if (!(desc->flags & AV_PIX_FMT_FLAG_PAL) && !(desc->flags & AV_PIX_FMT_FLAG_HWACCEL))
             ff_add_format(&formats, fmt);
@@ -200,7 +200,7 @@ static const AVFilterPad outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vf_il = {
+AVFilter ff_vf_il = {
     .name          = "il",
     .description   = NULL_IF_CONFIG_SMALL("Deinterleave or interleave fields."),
     .priv_size     = sizeof(IlContext),

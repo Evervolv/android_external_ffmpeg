@@ -70,6 +70,7 @@ static int pcm_dvd_parse_header(AVCodecContext *avctx, const uint8_t *header)
     /* early exit if the header didn't change apart from the frame number */
     if (s->last_header == header_int)
         return 0;
+    s->last_header = -1;
 
     if (avctx->debug & FF_DEBUG_PICT_INFO)
         av_dlog(avctx, "pcm_dvd_parse_header: header = %02x%02x%02x\n",
@@ -157,21 +158,21 @@ static void *pcm_dvd_decode_samples(AVCodecContext *avctx, const uint8_t *src,
     GetByteContext gb;
     int i;
     uint8_t t;
-    int samples;
 
     bytestream2_init(&gb, src, blocks * s->block_size);
     switch (avctx->bits_per_coded_sample) {
-    case 16:
+    case 16: {
 #if HAVE_BIGENDIAN
         bytestream2_get_buffer(&gb, dst16, blocks * s->block_size);
         dst16 += blocks * s->block_size / 2;
 #else
-        samples = blocks * avctx->channels;
+        int samples = blocks * avctx->channels;
         do {
             *dst16++ = bytestream2_get_be16u(&gb);
         } while (--samples);
 #endif
         return dst16;
+    }
     case 20:
         if (avctx->channels == 1) {
             do {
@@ -248,8 +249,8 @@ static int pcm_dvd_decode_frame(AVCodecContext *avctx, void *data,
 
     if ((retval = pcm_dvd_parse_header(avctx, src)))
         return retval;
-    if (s->last_block_size != s->block_size) {
-        av_log(avctx, AV_LOG_WARNING, "block_size has changed\n");
+    if (s->last_block_size && s->last_block_size != s->block_size) {
+        av_log(avctx, AV_LOG_WARNING, "block_size has changed %d != %d\n", s->last_block_size, s->block_size);
         s->extra_sample_count = 0;
     }
     s->last_block_size = s->block_size;

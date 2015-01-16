@@ -55,13 +55,13 @@ enum var_name {
     VARS_NB
 };
 
-typedef struct {
+typedef struct FilterParam {
     int radius;
     int power;
     char *radius_expr;
 } FilterParam;
 
-typedef struct {
+typedef struct BoxBlurContext {
     const AVClass *class;
     FilterParam luma_param;
     FilterParam chroma_param;
@@ -372,7 +372,7 @@ static const AVFilterPad avfilter_vf_boxblur_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vf_boxblur = {
+AVFilter ff_vf_boxblur = {
     .name          = "boxblur",
     .description   = NULL_IF_CONFIG_SMALL("Blur the input."),
     .priv_size     = sizeof(BoxBlurContext),

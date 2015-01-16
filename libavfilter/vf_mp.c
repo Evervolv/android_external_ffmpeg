@@ -111,8 +111,11 @@ static const struct {
     {IMGFMT_444P,  AV_PIX_FMT_YUVJ444P},
     {IMGFMT_440P,  AV_PIX_FMT_YUVJ440P},
 
+#if FF_API_XVMC
     {IMGFMT_XVMC_MOCO_MPEG2, AV_PIX_FMT_XVMC_MPEG2_MC},
     {IMGFMT_XVMC_IDCT_MPEG2, AV_PIX_FMT_XVMC_MPEG2_IDCT},
+#endif /* FF_API_XVMC */
+
     {IMGFMT_VDPAU_MPEG1,     AV_PIX_FMT_VDPAU_MPEG1},
     {IMGFMT_VDPAU_MPEG2,     AV_PIX_FMT_VDPAU_MPEG2},
     {IMGFMT_VDPAU_H264,      AV_PIX_FMT_VDPAU_H264},
@@ -207,7 +210,7 @@ int ff_mp_msg_test(int mod, int lev){
 
 void ff_init_avcodec(void)
 {
-    //we maybe should init but its kinda 1. unneeded 2. a bit inpolite from here
+    //we maybe should init but its kinda 1. unneeded 2. a bit impolite from here
 }
 
 //Exact copy of vf.c
@@ -470,8 +473,6 @@ int ff_vf_next_put_image(struct vf_instance *vf,mp_image_t *mpi, double pts){
 
     picref->width  = mpi->w;
     picref->height = mpi->h;
-
-    picref->type = AVMEDIA_TYPE_VIDEO;
 
     for(i=0; conversion_map[i].fmt && mpi->imgfmt != conversion_map[i].fmt; i++);
     picref->format = conversion_map[i].pix_fmt;
@@ -778,7 +779,7 @@ static const AVFilterPad mp_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vf_mp = {
+AVFilter ff_vf_mp = {
     .name          = "mp",
     .description   = NULL_IF_CONFIG_SMALL("Apply a libmpcodecs filter to the input video."),
     .init          = init,

@@ -32,7 +32,7 @@
 #define BITSTREAM_READER_LE
 #include "get_bits.h"
 #include "bytestream.h"
-#include "dsputil.h"
+#include "idctdsp.h"
 #include "aandcttab.h"
 #include "eaidct.h"
 #include "internal.h"
@@ -51,9 +51,9 @@ static av_cold int tgq_decode_init(AVCodecContext *avctx)
     TgqContext *s = avctx->priv_data;
     uint8_t idct_permutation[64];
     s->avctx = avctx;
-    ff_init_scantable_permutation(idct_permutation, FF_NO_IDCT_PERM);
+    ff_init_scantable_permutation(idct_permutation, FF_IDCT_PERM_NONE);
     ff_init_scantable(idct_permutation, &s->scantable, ff_zigzag_direct);
-    avctx->time_base = (AVRational){1, 15};
+    avctx->framerate = (AVRational){ 15, 1 };
     avctx->pix_fmt   = AV_PIX_FMT_YUV420P;
     return 0;
 }
@@ -219,9 +219,10 @@ static int tgq_decode_frame(AVCodecContext *avctx,
         s->height = bytestream2_get_le16u(&s->gb);
     }
 
-    if (s->avctx->width!=s->width || s->avctx->height!=s->height) {
-        avcodec_set_dimensions(s->avctx, s->width, s->height);
-    }
+    ret = ff_set_dimensions(s->avctx, s->width, s->height);
+    if (ret < 0)
+        return ret;
+
     tgq_calculate_qtable(s, bytestream2_get_byteu(&s->gb));
     bytestream2_skip(&s->gb, 3);
 

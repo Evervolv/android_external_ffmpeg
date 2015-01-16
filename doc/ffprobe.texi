@@ -119,6 +119,10 @@ Show payload data, as a hexadecimal and ASCII dump. Coupled with
 
 The dump is printed as the "data" field. It may contain newlines.
 
+@item -show_data_hash @var{algorithm}
+Show a hash of payload data, for packets with @option{-show_packets} and for
+codec extradata with @option{-show_streams}.
+
 @item -show_error
 Show information about the error found when trying to probe the input.
 
@@ -180,7 +184,7 @@ format : stream=codec_type
 
 To show all the tags in the stream and format sections:
 @example
-format_tags : format_tags
+stream_tags : format_tags
 @end example
 
 To show only the @code{title} tag (if available) in the stream
@@ -197,11 +201,11 @@ The information for each single packet is printed within a dedicated
 section with name "PACKET".
 
 @item -show_frames
-Show information about each frame contained in the input multimedia
-stream.
+Show information about each frame and subtitle contained in the input
+multimedia stream.
 
 The information for each single frame is printed within a dedicated
-section with name "FRAME".
+section with name "FRAME" or "SUBTITLE".
 
 @item -show_streams
 Show information about each media stream contained in the input
@@ -317,6 +321,12 @@ Show information related to program and library versions. This is the
 equivalent of setting both @option{-show_program_version} and
 @option{-show_library_versions} options.
 
+@item -show_pixel_formats
+Show information about all pixel formats supported by FFmpeg.
+
+Pixel format information for each format is printed within a section
+with name "PIXEL_FORMAT".
+
 @item -bitexact
 Force bitexact output, useful to produce output which is not dependent
 on the specific build.
@@ -336,6 +346,39 @@ used for printing all the parts of the output.
 A writer may accept one or more arguments, which specify the options
 to adopt. The options are specified as a list of @var{key}=@var{value}
 pairs, separated by ":".
+
+All writers support the following options:
+
+@table @option
+@item string_validation, sv
+Set string validation mode.
+
+The following values are accepted.
+@table @samp
+@item fail
+The writer will fail immediately in case an invalid string (UTF-8)
+sequence or code point is found in the input. This is especially
+useful to validate input metadata.
+
+@item ignore
+Any validation error will be ignored. This will result in possibly
+broken output, especially with the json or xml writer.
+
+@item replace
+The writer will substitute invalid UTF-8 sequences or code points with
+the string specified with the @option{string_validation_replacement}.
+@end table
+
+Default value is @samp{replace}.
+
+@item string_validation_replacement, svr
+Set replacement string to use in case @option{string_validation} is
+set to @samp{replace}.
+
+In case the option is not specified, the writer will assume the empty
+string, that is it will remove the invalid sequences from the input
+strings.
+@end table
 
 A description of the currently available writers follows.
 
@@ -566,6 +609,7 @@ DV, GXF and AVI timecodes are available in format metadata
 
 @include config.texi
 @ifset config-all
+@set config-readonly
 @ifset config-avutil
 @include utils.texi
 @end ifset

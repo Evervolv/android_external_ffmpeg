@@ -30,11 +30,14 @@
 #define AVCODEC_MJPEGDEC_H
 
 #include "libavutil/log.h"
+#include "libavutil/pixdesc.h"
+#include "libavutil/stereo3d.h"
 
 #include "avcodec.h"
+#include "blockdsp.h"
 #include "get_bits.h"
-#include "dsputil.h"
 #include "hpeldsp.h"
+#include "idctdsp.h"
 
 #define MAX_COMPONENTS 4
 
@@ -60,13 +63,13 @@ typedef struct MJpegDecodeContext {
     int progressive;
     int rgb;
     int upscale_h;
-    int chroma_height;
     int upscale_v;
     int rct;            /* standard rct */
     int pegasus_rct;    /* pegasus reversible colorspace transform */
     int bits;           /* bits per component */
     int colr;
     int xfrm;
+    int adobe_transform;
 
     int maxval;
     int near;         ///< near lossless bound (si 0 for lossless)
@@ -99,9 +102,11 @@ typedef struct MJpegDecodeContext {
     int16_t (*blocks[MAX_COMPONENTS])[64]; ///< intermediate sums (progressive mode)
     uint8_t *last_nnz[MAX_COMPONENTS];
     uint64_t coefs_finished[MAX_COMPONENTS]; ///< bitmask of which coefs have been completely decoded (progressive mode)
+    int palette_index;
     ScanTable scantable;
-    DSPContext dsp;
+    BlockDSPContext bdsp;
     HpelDSPContext hdsp;
+    IDCTDSPContext idsp;
 
     int restart_interval;
     int restart_count;
@@ -120,6 +125,10 @@ typedef struct MJpegDecodeContext {
 
     int extern_huff;
     AVDictionary *exif_metadata;
+
+    AVStereo3D *stereo3d; ///!< stereoscopic information (cached, since it is read before frame allocation)
+
+    const AVPixFmtDescriptor *pix_desc;
 } MJpegDecodeContext;
 
 int ff_mjpeg_decode_init(AVCodecContext *avctx);

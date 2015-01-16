@@ -130,9 +130,9 @@ static av_cold int init(AVFilterContext *ctx)
 
     mb->cache_allocated = mb->w * mb->h * 3;
     mb->cache_used = 0;
-    mb->point_cache= av_malloc(sizeof(*mb->point_cache)*mb->cache_allocated);
-    mb-> next_cache= av_malloc(sizeof(*mb-> next_cache)*mb->cache_allocated);
-    mb-> zyklus    = av_malloc(sizeof(*mb->zyklus) * (mb->maxiter+16));
+    mb->point_cache= av_malloc_array(mb->cache_allocated, sizeof(*mb->point_cache));
+    mb-> next_cache= av_malloc_array(mb->cache_allocated, sizeof(*mb-> next_cache));
+    mb-> zyklus    = av_malloc_array(mb->maxiter + 16, sizeof(*mb->zyklus));
 
     return 0;
 }
@@ -417,7 +417,7 @@ static const AVFilterPad mandelbrot_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vsrc_mandelbrot = {
+AVFilter ff_vsrc_mandelbrot = {
     .name          = "mandelbrot",
     .description   = NULL_IF_CONFIG_SMALL("Render a Mandelbrot fractal."),
     .priv_size     = sizeof(MBContext),

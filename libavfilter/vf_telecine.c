@@ -101,7 +101,7 @@ static int query_formats(AVFilterContext *ctx)
     AVFilterFormats *pix_fmts = NULL;
     int fmt;
 
-    for (fmt = 0; fmt < AV_PIX_FMT_NB; fmt++) {
+    for (fmt = 0; av_pix_fmt_desc_get(fmt); fmt++) {
         const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(fmt);
         if (!(desc->flags & AV_PIX_FMT_FLAG_HWACCEL ||
               desc->flags & AV_PIX_FMT_FLAG_PAL     ||
@@ -272,7 +272,7 @@ static const AVFilterPad telecine_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vf_telecine = {
+AVFilter ff_vf_telecine = {
     .name          = "telecine",
     .description   = NULL_IF_CONFIG_SMALL("Apply a telecine pattern."),
     .priv_size     = sizeof(TelecineContext),

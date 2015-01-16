@@ -1,5 +1,5 @@
 /*
- * General DV muxer/demuxer
+ * General DV demuxer
  * Copyright (c) 2003 Roman Shaposhnik
  *
  * Many thanks to Dan Dennedy <dan@dennedy.org> for providing wealth
@@ -32,7 +32,7 @@
 #include "avformat.h"
 #include "internal.h"
 #include "libavcodec/dv_profile.h"
-#include "libavcodec/dvdata.h"
+#include "libavcodec/dv.h"
 #include "libavutil/channel_layout.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/mathematics.h"
@@ -41,7 +41,7 @@
 #include "libavutil/avassert.h"
 
 struct DVDemuxContext {
-    const DVprofile*  sys;    /* Current DV profile. E.g.: 525/60, 625/50 */
+    const AVDVProfile*  sys;    /* Current DV profile. E.g.: 525/60, 625/50 */
     AVFormatContext*  fctx;
     AVStream*         vst;
     AVStream*         ast[4];
@@ -72,7 +72,7 @@ static inline uint16_t dv_audio_12to16(uint16_t sample)
     return result;
 }
 
-static const uint8_t *dv_extract_pack(uint8_t *frame, enum dv_pack_type t)
+static const uint8_t *dv_extract_pack(const uint8_t *frame, enum dv_pack_type t)
 {
     int offs;
     int c;
@@ -116,8 +116,8 @@ static const int dv_audio_frequency[3] = {
  * 3. Audio is always returned as 16bit linear samples: 12bit nonlinear samples
  *    are converted into 16bit linear ones.
  */
-static int dv_extract_audio(uint8_t *frame, uint8_t **ppcm,
-                            const DVprofile *sys)
+static int dv_extract_audio(const uint8_t *frame, uint8_t **ppcm,
+                            const AVDVProfile *sys)
 {
     int size, chan, i, j, d, of, smpls, freq, quant, half_ch;
     uint16_t lc, rc;
@@ -219,7 +219,7 @@ static int dv_extract_audio(uint8_t *frame, uint8_t **ppcm,
     return size;
 }
 
-static int dv_extract_audio_info(DVDemuxContext *c, uint8_t *frame)
+static int dv_extract_audio_info(DVDemuxContext *c, const uint8_t *frame)
 {
     const uint8_t *as_pack;
     int freq, stype, smpls, quant, i, ach;
@@ -279,7 +279,7 @@ static int dv_extract_audio_info(DVDemuxContext *c, uint8_t *frame)
     return (c->sys->audio_min_samples[freq] + smpls) * 4; /* 2ch, 2bytes */
 }
 
-static int dv_extract_video_info(DVDemuxContext *c, uint8_t *frame)
+static int dv_extract_video_info(DVDemuxContext *c, const uint8_t *frame)
 {
     const uint8_t *vsc_pack;
     AVCodecContext *avctx;
@@ -291,7 +291,7 @@ static int dv_extract_video_info(DVDemuxContext *c, uint8_t *frame)
 
         avpriv_set_pts_info(c->vst, 64, c->sys->time_base.num,
                             c->sys->time_base.den);
-        avctx->time_base = c->sys->time_base;
+        c->vst->avg_frame_rate = av_inv_q(c->vst->time_base);
 
         /* finding out SAR is a little bit messy */
         vsc_pack = dv_extract_pack(frame, dv_video_control);
@@ -307,7 +307,7 @@ static int dv_extract_video_info(DVDemuxContext *c, uint8_t *frame)
     return size;
 }
 
-static int dv_extract_timecode(DVDemuxContext* c, uint8_t* frame, char *tc)
+static int dv_extract_timecode(DVDemuxContext* c, const uint8_t* frame, char *tc)
 {
     const uint8_t *tc_pack;
 
@@ -372,7 +372,7 @@ int avpriv_dv_produce_packet(DVDemuxContext *c, AVPacket *pkt,
     uint8_t *ppcm[5] = { 0 };
 
     if (buf_size < DV_PROFILE_BYTES ||
-        !(c->sys = avpriv_dv_frame_profile(c->sys, buf, buf_size)) ||
+        !(c->sys = av_dv_frame_profile(c->sys, buf, buf_size)) ||
         buf_size < c->sys->frame_size) {
         return -1;   /* Broken frame, or not enough data */
     }
@@ -422,7 +422,8 @@ static int64_t dv_frame_offset(AVFormatContext *s, DVDemuxContext *c,
                                int64_t timestamp, int flags)
 {
     // FIXME: sys may be wrong if last dv_read_packet() failed (buffer is junk)
-    const DVprofile *sys = avpriv_dv_codec_profile(c->vst->codec);
+    const AVDVProfile *sys = av_dv_codec_profile(c->vst->codec->width, c->vst->codec->height,
+                                                 c->vst->codec->pix_fmt);
     int64_t offset;
     int64_t size       = avio_size(s->pb) - s->data_offset;
     int64_t max_offset = ((size - 1) / sys->frame_size) * sys->frame_size;
@@ -503,7 +504,7 @@ static int dv_read_header(AVFormatContext *s)
 
     state = avio_rb32(s->pb);
     while ((state & 0xffffff7f) != 0x1f07003f) {
-        if (url_feof(s->pb)) {
+        if (avio_feof(s->pb)) {
             av_log(s, AV_LOG_ERROR, "Cannot find DV header.\n");
             return -1;
         }
@@ -522,9 +523,9 @@ static int dv_read_header(AVFormatContext *s)
         avio_seek(s->pb, -DV_PROFILE_BYTES, SEEK_CUR) < 0)
         return AVERROR(EIO);
 
-    c->dv_demux->sys = avpriv_dv_frame_profile(c->dv_demux->sys,
-                                               c->buf,
-                                               DV_PROFILE_BYTES);
+    c->dv_demux->sys = av_dv_frame_profile(c->dv_demux->sys,
+                                           c->buf,
+                                           DV_PROFILE_BYTES);
     if (!c->dv_demux->sys) {
         av_log(s, AV_LOG_ERROR,
                "Can't determine profile of DV input stream.\n");
@@ -585,31 +586,37 @@ static int dv_read_close(AVFormatContext *s)
 
 static int dv_probe(AVProbeData *p)
 {
-    unsigned state, marker_pos = 0;
+    unsigned marker_pos = 0;
     int i;
     int matches           = 0;
+    int firstmatch        = 0;
     int secondary_matches = 0;
 
     if (p->buf_size < 5)
         return 0;
 
-    state = AV_RB32(p->buf);
-    for (i = 4; i < p->buf_size; i++) {
-        if ((state & 0xffffff7f) == 0x1f07003f)
-            matches++;
-        // any section header, also with seq/chan num != 0,
-        // should appear around every 12000 bytes, at least 10 per frame
-        if ((state & 0xff07ff7f) == 0x1f07003f)
-            secondary_matches++;
-        if (state == 0x003f0700 || state == 0xff3f0700)
-            marker_pos = i;
-        if (state == 0xff3f0701 && i - marker_pos == 80)
-            matches++;
-        state = (state << 8) | p->buf[i];
+    for (i = 0; i < p->buf_size-4; i++) {
+        unsigned state = AV_RB32(p->buf+i);
+        if ((state & 0x0007f840) == 0x00070000) {
+            // any section header, also with seq/chan num != 0,
+            // should appear around every 12000 bytes, at least 10 per frame
+            if ((state & 0xff07ff7f) == 0x1f07003f) {
+                secondary_matches++;
+                if ((state & 0xffffff7f) == 0x1f07003f) {
+                    matches++;
+                    if (!i)
+                        firstmatch = 1;
+                }
+            }
+            if (state == 0x003f0700 || state == 0xff3f0700)
+                marker_pos = i;
+            if (state == 0xff3f0701 && i - marker_pos == 80)
+                matches++;
+        }
     }
 
     if (matches && p->buf_size / matches < 1024 * 1024) {
-        if (matches > 4 ||
+        if (matches > 4 || firstmatch ||
             (secondary_matches >= 10 &&
              p->buf_size / secondary_matches < 24000))
             // not max to avoid dv in mov to match
@@ -619,7 +626,6 @@ static int dv_probe(AVProbeData *p)
     return 0;
 }
 
-#if CONFIG_DV_DEMUXER
 AVInputFormat ff_dv_demuxer = {
     .name           = "dv",
     .long_name      = NULL_IF_CONFIG_SMALL("DV (Digital Video)"),
@@ -631,4 +637,3 @@ AVInputFormat ff_dv_demuxer = {
     .read_seek      = dv_read_seek,
     .extensions     = "dv,dif",
 };
-#endif

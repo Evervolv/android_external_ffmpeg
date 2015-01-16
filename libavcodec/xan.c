@@ -1,6 +1,6 @@
 /*
  * Wing Commander/Xan Video Decoder
- * Copyright (C) 2003 the ffmpeg project
+ * Copyright (c) 2003 The FFmpeg Project
  *
  * This file is part of FFmpeg.
  *
@@ -123,12 +123,11 @@ static int xan_huffman_decode(uint8_t *dest, int dest_len,
     uint8_t val = ival;
     uint8_t *dest_end = dest + dest_len;
     uint8_t *dest_start = dest;
+    int ret;
     GetBitContext gb;
 
-    if (ptr_len < 0)
-        return AVERROR_INVALIDDATA;
-
-    init_get_bits(&gb, ptr, ptr_len * 8);
+    if ((ret = init_get_bits8(&gb, ptr, ptr_len)) < 0)
+        return ret;
 
     while (val != 0x16) {
         unsigned idx = val - 0x17 + get_bits1(&gb) * byte;
@@ -557,7 +556,7 @@ static int xan_decode_frame(AVCodecContext *avctx,
         int i;
         tag  = bytestream2_get_le32(&ctx);
         size = bytestream2_get_be32(&ctx);
-        if(size < 0) {
+        if (size < 0) {
             av_log(avctx, AV_LOG_ERROR, "Invalid tag size %d\n", size);
             return AVERROR_INVALIDDATA;
         }

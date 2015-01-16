@@ -34,8 +34,6 @@
 #define URL_PROTOCOL_FLAG_NESTED_SCHEME 1 /*< The protocol name can be the first part of a nested protocol scheme */
 #define URL_PROTOCOL_FLAG_NETWORK       2 /*< The protocol uses network */
 
-extern int (*url_interrupt_cb)(void);
-
 extern const AVClass ffurl_context_class;
 
 typedef struct URLContext {
@@ -226,10 +224,8 @@ int ffurl_shutdown(URLContext *h, int flags);
 
 /**
  * Register the URLProtocol protocol.
- *
- * @param size the size of the URLProtocol struct referenced
  */
-int ffurl_register_protocol(URLProtocol *protocol, int size);
+int ffurl_register_protocol(URLProtocol *protocol);
 
 /**
  * Check if the user has requested to interrup a blocking function
@@ -242,7 +238,7 @@ int ff_check_interrupt(AVIOInterruptCB *cb);
  *
  * @param prev result of the previous call to this functions or NULL.
  */
-URLProtocol *ffurl_protocol_next(URLProtocol *prev);
+URLProtocol *ffurl_protocol_next(const URLProtocol *prev);
 
 /* udp.c */
 int ff_udp_set_remote_url(URLContext *h, const char *uri);

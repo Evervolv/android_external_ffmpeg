@@ -32,6 +32,7 @@ struct oggopus_private {
     int64_t cur_dts;
 };
 
+#define OPUS_SEEK_PREROLL_MS 80
 #define OPUS_HEAD_SIZE 19
 
 static int opus_header(AVFormatContext *avf, int idx)
@@ -55,6 +56,7 @@ static int opus_header(AVFormatContext *avf, int idx)
         st->codec->codec_id   = AV_CODEC_ID_OPUS;
         st->codec->channels   = AV_RL8 (packet + 9);
         priv->pre_skip        = AV_RL16(packet + 10);
+        st->codec->delay      = priv->pre_skip;
         /*orig_sample_rate    = AV_RL32(packet + 12);*/
         /*gain                = AV_RL16(packet + 16);*/
         /*channel_map         = AV_RL8 (packet + 18);*/
@@ -65,6 +67,9 @@ static int opus_header(AVFormatContext *avf, int idx)
         memcpy(st->codec->extradata, packet, os->psize);
 
         st->codec->sample_rate = 48000;
+        av_codec_set_seek_preroll(st->codec,
+                                  av_rescale(OPUS_SEEK_PREROLL_MS,
+                                             st->codec->sample_rate, 1000));
         avpriv_set_pts_info(st, 64, 1, 48000);
         priv->need_comments = 1;
         return 1;
@@ -73,7 +78,7 @@ static int opus_header(AVFormatContext *avf, int idx)
     if (priv->need_comments) {
         if (os->psize < 8 || memcmp(packet, "OpusTags", 8))
             return AVERROR_INVALIDDATA;
-        ff_vorbis_comment(avf, &st->metadata, packet + 8, os->psize - 8);
+        ff_vorbis_stream_comment(avf, st, packet + 8, os->psize - 8);
         priv->need_comments--;
         return 1;
     }
@@ -129,16 +134,13 @@ static int opus_packet(AVFormatContext *avf, int idx)
         duration += d;
         last_pkt = next_pkt =  next_pkt + os->psize;
         for (; seg < os->nsegs; seg++) {
-            if (os->segments[seg] < 255) {
-                int d = opus_duration(last_pkt, os->segments[seg]);
-                if (d < 0) {
-                    duration = os->granule;
-                    break;
-                }
-                duration += d;
-                last_pkt  = next_pkt + os->segments[seg];
-            }
             next_pkt += os->segments[seg];
+            if (os->segments[seg] < 255 && next_pkt != last_pkt) {
+                int d = opus_duration(last_pkt, next_pkt - last_pkt);
+                if (d > 0)
+                    duration += d;
+                last_pkt = next_pkt;
+            }
         }
         os->lastpts                 =
         os->lastdts                 = os->granule - duration;

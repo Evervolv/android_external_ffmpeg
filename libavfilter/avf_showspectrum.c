@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012 Clément Bœsch
+ * Copyright (c) 2012-2013 Clément Bœsch
  * Copyright (c) 2013 Rudolf Polzer <divverent@xonotic.org>
  *
  * This file is part of FFmpeg.
@@ -37,6 +37,8 @@
 enum DisplayMode  { COMBINED, SEPARATE, NB_MODES };
 enum DisplayScale { LINEAR, SQRT, CBRT, LOG, NB_SCALES };
 enum ColorMode    { CHANNEL, INTENSITY, NB_CLMODES };
+enum WindowFunc   { WFUNC_NONE, WFUNC_HANN, WFUNC_HAMMING, WFUNC_BLACKMAN, NB_WFUNC };
+enum SlideMode    { REPLACE, SCROLL, FULLFRAME, NB_SLIDES };
 
 typedef struct {
     const AVClass *class;
@@ -54,9 +56,8 @@ typedef struct {
     RDFTContext *rdft;          ///< Real Discrete Fourier Transform context
     int rdft_bits;              ///< number of bits (RDFT window size = 1<<rdft_bits)
     FFTSample **rdft_data;      ///< bins holder for each (displayed) channels
-    int filled;                 ///< number of samples (per channel) filled in current rdft_buffer
-    int consumed;               ///< number of samples (per channel) consumed from the input frame
     float *window_func_lut;     ///< Window function LUT
+    enum WindowFunc win_func;
     float *combine_buffer;      ///< color combining buffer (3 * h items)
 } ShowSpectrumContext;
 
@@ -66,19 +67,26 @@ typedef struct {
 static const AVOption showspectrum_options[] = {
     { "size", "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x512"}, 0, 0, FLAGS },
     { "s",    "set video size", OFFSET(w), AV_OPT_TYPE_IMAGE_SIZE, {.str = "640x512"}, 0, 0, FLAGS },
-    { "slide", "set sliding mode", OFFSET(sliding), AV_OPT_TYPE_INT, {.i64 = 0}, 0, 1, FLAGS },
+    { "slide", "set sliding mode", OFFSET(sliding), AV_OPT_TYPE_INT, {.i64 = 0}, 0, NB_SLIDES, FLAGS, "slide" },
+        { "replace", "replace old columns with new", 0, AV_OPT_TYPE_CONST, {.i64=REPLACE}, 0, 0, FLAGS, "slide" },
+        { "scroll", "scroll from right to left", 0, AV_OPT_TYPE_CONST, {.i64=SCROLL}, 0, 0, FLAGS, "slide" },
+        { "fullframe", "return full frames", 0, AV_OPT_TYPE_CONST, {.i64=FULLFRAME}, 0, 0, FLAGS, "slide" },
     { "mode", "set channel display mode", OFFSET(mode), AV_OPT_TYPE_INT, {.i64=COMBINED}, COMBINED, NB_MODES-1, FLAGS, "mode" },
-    { "combined", "combined mode", 0, AV_OPT_TYPE_CONST, {.i64=COMBINED}, 0, 0, FLAGS, "mode" },
-    { "separate", "separate mode", 0, AV_OPT_TYPE_CONST, {.i64=SEPARATE}, 0, 0, FLAGS, "mode" },
+        { "combined", "combined mode", 0, AV_OPT_TYPE_CONST, {.i64=COMBINED}, 0, 0, FLAGS, "mode" },
+        { "separate", "separate mode", 0, AV_OPT_TYPE_CONST, {.i64=SEPARATE}, 0, 0, FLAGS, "mode" },
     { "color", "set channel coloring", OFFSET(color_mode), AV_OPT_TYPE_INT, {.i64=CHANNEL}, CHANNEL, NB_CLMODES-1, FLAGS, "color" },
-    { "channel",   "separate color for each channel", 0, AV_OPT_TYPE_CONST, {.i64=CHANNEL},   0, 0, FLAGS, "color" },
-    { "intensity", "intensity based coloring",        0, AV_OPT_TYPE_CONST, {.i64=INTENSITY}, 0, 0, FLAGS, "color" },
+        { "channel",   "separate color for each channel", 0, AV_OPT_TYPE_CONST, {.i64=CHANNEL},   0, 0, FLAGS, "color" },
+        { "intensity", "intensity based coloring",        0, AV_OPT_TYPE_CONST, {.i64=INTENSITY}, 0, 0, FLAGS, "color" },
     { "scale", "set display scale", OFFSET(scale), AV_OPT_TYPE_INT, {.i64=SQRT}, LINEAR, NB_SCALES-1, FLAGS, "scale" },
-    { "sqrt", "square root", 0, AV_OPT_TYPE_CONST, {.i64=SQRT},   0, 0, FLAGS, "scale" },
-    { "cbrt", "cubic root",  0, AV_OPT_TYPE_CONST, {.i64=CBRT},   0, 0, FLAGS, "scale" },
-    { "log",  "logarithmic", 0, AV_OPT_TYPE_CONST, {.i64=LOG},    0, 0, FLAGS, "scale" },
-    { "lin",  "linear",      0, AV_OPT_TYPE_CONST, {.i64=LINEAR}, 0, 0, FLAGS, "scale" },
+        { "sqrt", "square root", 0, AV_OPT_TYPE_CONST, {.i64=SQRT},   0, 0, FLAGS, "scale" },
+        { "cbrt", "cubic root",  0, AV_OPT_TYPE_CONST, {.i64=CBRT},   0, 0, FLAGS, "scale" },
+        { "log",  "logarithmic", 0, AV_OPT_TYPE_CONST, {.i64=LOG},    0, 0, FLAGS, "scale" },
+        { "lin",  "linear",      0, AV_OPT_TYPE_CONST, {.i64=LINEAR}, 0, 0, FLAGS, "scale" },
     { "saturation", "color saturation multiplier", OFFSET(saturation), AV_OPT_TYPE_FLOAT, {.dbl = 1}, -10, 10, FLAGS },
+    { "win_func", "set window function", OFFSET(win_func), AV_OPT_TYPE_INT, {.i64 = WFUNC_HANN}, 0, NB_WFUNC-1, FLAGS, "win_func" },
+        { "hann",     "Hann window",     0, AV_OPT_TYPE_CONST, {.i64 = WFUNC_HANN},     0, 0, FLAGS, "win_func" },
+        { "hamming",  "Hamming window",  0, AV_OPT_TYPE_CONST, {.i64 = WFUNC_HAMMING},  0, 0, FLAGS, "win_func" },
+        { "blackman", "Blackman window", 0, AV_OPT_TYPE_CONST, {.i64 = WFUNC_BLACKMAN}, 0, 0, FLAGS, "win_func" },
     { NULL }
 };
 
@@ -169,6 +177,11 @@ static int config_output(AVFilterLink *outlink)
 
         av_rdft_end(s->rdft);
         s->rdft = av_rdft_init(rdft_bits, DFT_R2C);
+        if (!s->rdft) {
+            av_log(ctx, AV_LOG_ERROR, "Unable to create RDFT context. "
+                   "The window size might be too high.\n");
+            return AVERROR(EINVAL);
+        }
         s->rdft_bits = rdft_bits;
 
         /* RDFT buffers: x2 for each (display) channel buffer.
@@ -193,16 +206,34 @@ static int config_output(AVFilterLink *outlink)
             if (!s->rdft_data[i])
                 return AVERROR(ENOMEM);
         }
-        s->filled = 0;
 
-        /* pre-calc windowing function (hann here) */
+        /* pre-calc windowing function */
         s->window_func_lut =
             av_realloc_f(s->window_func_lut, win_size,
                          sizeof(*s->window_func_lut));
         if (!s->window_func_lut)
             return AVERROR(ENOMEM);
-        for (i = 0; i < win_size; i++)
-            s->window_func_lut[i] = .5f * (1 - cos(2*M_PI*i / (win_size-1)));
+        switch (s->win_func) {
+        case WFUNC_NONE:
+            for (i = 0; i < win_size; i++)
+                s->window_func_lut[i] = 1.;
+            break;
+        case WFUNC_HANN:
+            for (i = 0; i < win_size; i++)
+                s->window_func_lut[i] = .5f * (1 - cos(2*M_PI*i / (win_size-1)));
+            break;
+        case WFUNC_HAMMING:
+            for (i = 0; i < win_size; i++)
+                s->window_func_lut[i] = .54f - .46f * cos(2*M_PI*i / (win_size-1));
+            break;
+        case WFUNC_BLACKMAN: {
+            for (i = 0; i < win_size; i++)
+                s->window_func_lut[i] = .42f - .5f*cos(2*M_PI*i / (win_size-1)) + .08f*cos(4*M_PI*i / (win_size-1));
+            break;
+        }
+        default:
+            av_assert0(0);
+        }
 
         /* prepare the initial picref buffer (black frame) */
         av_frame_free(&s->outpicref);
@@ -221,6 +252,13 @@ static int config_output(AVFilterLink *outlink)
     if (s->xpos >= outlink->w)
         s->xpos = 0;
 
+    outlink->frame_rate = av_make_q(inlink->sample_rate, win_size);
+    if (s->sliding == FULLFRAME)
+        outlink->frame_rate.den *= outlink->w;
+
+    inlink->min_samples = inlink->max_samples = inlink->partial_buf_size =
+        win_size;
+
     s->combine_buffer =
         av_realloc_f(s->combine_buffer, outlink->h * 3,
                      sizeof(*s->combine_buffer));
@@ -230,36 +268,33 @@ static int config_output(AVFilterLink *outlink)
     return 0;
 }
 
-inline static int push_frame(AVFilterLink *outlink)
-{
-    ShowSpectrumContext *s = outlink->src->priv;
-
-    s->xpos++;
-    if (s->xpos >= outlink->w)
-        s->xpos = 0;
-    s->filled = 0;
-    s->req_fullfilled = 1;
-
-    return ff_filter_frame(outlink, av_frame_clone(s->outpicref));
-}
-
 static int request_frame(AVFilterLink *outlink)
 {
     ShowSpectrumContext *s = outlink->src->priv;
     AVFilterLink *inlink = outlink->src->inputs[0];
+    unsigned i;
     int ret;
 
     s->req_fullfilled = 0;
     do {
         ret = ff_request_frame(inlink);
+        if (ret == AVERROR_EOF && s->sliding == FULLFRAME && s->xpos > 0 &&
+            s->outpicref) {
+            for (i = 0; i < outlink->h; i++) {
+                memset(s->outpicref->data[0] + i * s->outpicref->linesize[0] + s->xpos,   0, outlink->w - s->xpos);
+                memset(s->outpicref->data[1] + i * s->outpicref->linesize[1] + s->xpos, 128, outlink->w - s->xpos);
+                memset(s->outpicref->data[2] + i * s->outpicref->linesize[2] + s->xpos, 128, outlink->w - s->xpos);
+            }
+            ret = ff_filter_frame(outlink, s->outpicref);
+            s->outpicref = NULL;
+            s->req_fullfilled = 1;
+        }
     } while (!s->req_fullfilled && ret >= 0);
 
-    if (ret == AVERROR_EOF && s->outpicref)
-        push_frame(outlink);
     return ret;
 }
 
-static int plot_spectrum_column(AVFilterLink *inlink, AVFrame *insamples, int nb_samples)
+static int plot_spectrum_column(AVFilterLink *inlink, AVFrame *insamples)
 {
     int ret;
     AVFilterContext *ctx = inlink->dst;
@@ -272,34 +307,29 @@ static int plot_spectrum_column(AVFilterLink *inlink, AVFrame *insamples, int nb
     const int nb_freq = 1 << (s->rdft_bits - 1);
     const int win_size = nb_freq << 1;
     const double w = 1. / (sqrt(nb_freq) * 32768.);
+    int h = s->channel_height;
 
     int ch, plane, n, y;
-    const int start = s->filled;
-    const int add_samples = FFMIN(win_size - start, nb_samples);
+
+    av_assert0(insamples->nb_samples == win_size);
 
     /* fill RDFT input with the number of samples available */
     for (ch = 0; ch < s->nb_display_channels; ch++) {
         const int16_t *p = (int16_t *)insamples->extended_data[ch];
 
-        p += s->consumed;
-        for (n = 0; n < add_samples; n++)
-            s->rdft_data[ch][start + n] = p[n] * s->window_func_lut[start + n];
+        for (n = 0; n < win_size; n++)
+            s->rdft_data[ch][n] = p[n] * s->window_func_lut[n];
     }
-    s->filled += add_samples;
 
-    /* complete RDFT window size? */
-    if (s->filled == win_size) {
-
-        /* channel height */
-        int h = s->channel_height;
+    /* TODO reindent */
 
         /* run RDFT on each samples set */
         for (ch = 0; ch < s->nb_display_channels; ch++)
             av_rdft_calc(s->rdft, s->rdft_data[ch]);
 
         /* fill a new spectrum column */
-#define RE(y, ch) s->rdft_data[ch][2 * y + 0]
-#define IM(y, ch) s->rdft_data[ch][2 * y + 1]
+#define RE(y, ch) s->rdft_data[ch][2 * (y) + 0]
+#define IM(y, ch) s->rdft_data[ch][2 * (y) + 1]
 #define MAGNITUDE(y, ch) hypot(RE(y, ch), IM(y, ch))
 
         /* initialize buffer for combining to black */
@@ -420,7 +450,7 @@ static int plot_spectrum_column(AVFilterLink *inlink, AVFrame *insamples, int nb
         }
 
         /* copy to output */
-        if (s->sliding) {
+        if (s->sliding == SCROLL) {
             for (plane = 0; plane < 3; plane++) {
                 for (y = 0; y < outlink->h; y++) {
                     uint8_t *p = outpicref->data[plane] +
@@ -440,32 +470,32 @@ static int plot_spectrum_column(AVFilterLink *inlink, AVFrame *insamples, int nb
             }
         }
 
-        outpicref->pts = insamples->pts +
-            av_rescale_q(s->consumed,
-                         (AVRational){ 1, inlink->sample_rate },
-                         outlink->time_base);
-        ret = push_frame(outlink);
-        if (ret < 0)
-            return ret;
-    }
+        if (s->sliding != FULLFRAME || s->xpos == 0)
+            outpicref->pts = insamples->pts;
 
-    return add_samples;
+        s->xpos++;
+        if (s->xpos >= outlink->w)
+            s->xpos = 0;
+        if (s->sliding != FULLFRAME || s->xpos == 0) {
+            s->req_fullfilled = 1;
+            ret = ff_filter_frame(outlink, av_frame_clone(s->outpicref));
+            if (ret < 0)
+                return ret;
+        }
+
+    return win_size;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *insamples)
 {
     AVFilterContext *ctx = inlink->dst;
     ShowSpectrumContext *s = ctx->priv;
-    int ret = 0, left_samples = insamples->nb_samples;
+    unsigned win_size = 1 << s->rdft_bits;
+    int ret = 0;
 
-    s->consumed = 0;
-    while (left_samples) {
-        int ret = plot_spectrum_column(inlink, insamples, left_samples);
-        if (ret < 0)
-            break;
-        s->consumed += ret;
-        left_samples -= ret;
-    }
+    av_assert0(insamples->nb_samples <= win_size);
+    if (insamples->nb_samples == win_size)
+        ret = plot_spectrum_column(inlink, insamples);
 
     av_frame_free(&insamples);
     return ret;
@@ -490,7 +520,7 @@ static const AVFilterPad showspectrum_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_avf_showspectrum = {
+AVFilter ff_avf_showspectrum = {
     .name          = "showspectrum",
     .description   = NULL_IF_CONFIG_SMALL("Convert input audio to a spectrum video output."),
     .uninit        = uninit,

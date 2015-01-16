@@ -58,6 +58,8 @@ enum TwinVQFrameType {
 #define TWINVQ_SUBBLOCKS_MAX     16
 #define TWINVQ_BARK_N_COEF_MAX   4
 
+#define TWINVQ_MAX_FRAMES_PER_PACKET 2
+
 /**
  * Parameters and tables that are different for each frame type
  */
@@ -134,10 +136,12 @@ typedef struct TwinVQModeTab {
 
 typedef struct TwinVQContext {
     AVCodecContext *avctx;
-    AVFloatDSPContext fdsp;
+    AVFloatDSPContext *fdsp;
     FFTContext mdct_ctx[3];
 
     const TwinVQModeTab *mtab;
+
+    int is_6kbps;
 
     // history
     float lsp_hist[2][20];           ///< LSP coefficients of the last frame
@@ -162,7 +166,8 @@ typedef struct TwinVQContext {
     // scratch buffers
     float *tmp_buf;
 
-    TwinVQFrameData bits;
+    int frame_size, frames_per_packet, cur_frame;
+    TwinVQFrameData bits[TWINVQ_MAX_FRAMES_PER_PACKET];
 
     enum TwinVQCodec codec;
 

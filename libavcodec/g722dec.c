@@ -44,7 +44,7 @@
 #define OFFSET(x) offsetof(G722Context, x)
 #define AD AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_DECODING_PARAM
 static const AVOption options[] = {
-    { "bits_per_codeword", "Bits per G722 codeword", OFFSET(bits_per_codeword), AV_OPT_TYPE_FLAGS, { .i64 = 8 }, 6, 8, AD },
+    { "bits_per_codeword", "Bits per G722 codeword", OFFSET(bits_per_codeword), AV_OPT_TYPE_INT, { .i64 = 8 }, 6, 8, AD },
     { NULL }
 };
 
@@ -77,7 +77,7 @@ static const int16_t low_inv_quant5[32] = {
      587,   473,   370,   276,   190,   110,    35,   -35
 };
 
-static const int16_t *low_inv_quants[3] = { ff_g722_low_inv_quant6,
+static const int16_t * const low_inv_quants[3] = { ff_g722_low_inv_quant6,
                                                     low_inv_quant5,
                                             ff_g722_low_inv_quant4 };
 

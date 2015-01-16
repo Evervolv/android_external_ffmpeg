@@ -230,7 +230,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     AVFilterLink *outlink   = inlink->dst->outputs[0];
     int nb_samples          = buf->nb_samples;
     AVFrame *out_buf;
-    int64_t cur_sample = av_rescale_q(buf->pts, (AVRational){1, outlink->sample_rate}, outlink->time_base);
+    int64_t cur_sample = av_rescale_q(buf->pts, inlink->time_base, (AVRational){1, inlink->sample_rate});
 
     if ((!s->type && (s->start_sample + s->nb_samples < cur_sample)) ||
         ( s->type && (cur_sample + s->nb_samples < s->start_sample)))
@@ -287,7 +287,7 @@ static const AVFilterPad avfilter_af_afade_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_af_afade = {
+AVFilter ff_af_afade = {
     .name          = "afade",
     .description   = NULL_IF_CONFIG_SMALL("Fade in/out input audio."),
     .query_formats = query_formats,

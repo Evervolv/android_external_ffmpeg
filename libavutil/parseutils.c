@@ -29,6 +29,7 @@
 #include "eval.h"
 #include "log.h"
 #include "random_seed.h"
+#include "time_internal.h"
 #include "parseutils.h"
 
 #ifdef TEST
@@ -552,7 +553,7 @@ int av_parse_time(int64_t *timeval, const char *timestr, int duration)
     const char *p, *q;
     int64_t t;
     time_t now;
-    struct tm dt = { 0 };
+    struct tm dt = { 0 }, tmbuf;
     int today = 0, negative = 0, microseconds = 0;
     int i;
     static const char * const date_fmt[] = {
@@ -613,12 +614,14 @@ int av_parse_time(int64_t *timeval, const char *timestr, int duration)
             dt.tm_hour = 0;
         }
         if (!q) {
+            char *o;
             /* parse timestr as S+ */
-            dt.tm_sec = strtol(p, (void *)&q, 10);
-            if (q == p) /* the parsing didn't succeed */
+            dt.tm_sec = strtol(p, &o, 10);
+            if (o == p) /* the parsing didn't succeed */
                 return AVERROR(EINVAL);
             dt.tm_min = 0;
             dt.tm_hour = 0;
+            q = o;
         }
     }
 
@@ -645,7 +648,7 @@ int av_parse_time(int64_t *timeval, const char *timestr, int duration)
         int is_utc = *q == 'Z' || *q == 'z';
         q += is_utc;
         if (today) { /* fill in today's date */
-            struct tm dt2 = is_utc ? *gmtime(&now) : *localtime(&now);
+            struct tm dt2 = is_utc ? *gmtime_r(&now, &tmbuf) : *localtime_r(&now, &tmbuf);
             dt2.tm_hour = dt.tm_hour;
             dt2.tm_min  = dt.tm_min;
             dt2.tm_sec  = dt.tm_sec;

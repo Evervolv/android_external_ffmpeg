@@ -43,6 +43,9 @@ static int vqf_probe(AVProbeData *probe_packet)
     if (!memcmp(probe_packet->buf + 4, "00052200", 8))
         return AVPROBE_SCORE_MAX;
 
+    if (AV_RL32(probe_packet->buf + 12) > (1<<27))
+        return AVPROBE_SCORE_EXTENSION/2;
+
     return AVPROBE_SCORE_EXTENSION;
 }
 
@@ -141,11 +144,7 @@ static int vqf_read_header(AVFormatContext *s)
             break;
         case MKTAG('D','S','I','Z'): // size of compressed data
         {
-            char buf[8] = {0};
-            int size = avio_rb32(s->pb);
-
-            snprintf(buf, sizeof(buf), "%d", size);
-            av_dict_set(&s->metadata, "size", buf, 0);
+            av_dict_set_int(&s->metadata, "size", avio_rb32(s->pb), 0);
         }
             break;
         case MKTAG('Y','E','A','R'): // recording date
@@ -163,7 +162,7 @@ static int vqf_read_header(AVFormatContext *s)
 
         header_size -= len;
 
-    } while (header_size >= 0 && !url_feof(s->pb));
+    } while (header_size >= 0 && !avio_feof(s->pb));
 
     switch (rate_flag) {
     case -1:
@@ -246,7 +245,7 @@ static int vqf_read_packet(AVFormatContext *s, AVPacket *pkt)
     pkt->data[1] = c->last_frame_bits;
     ret = avio_read(s->pb, pkt->data+2, size);
 
-    if (ret<=0) {
+    if (ret != size) {
         av_free_packet(pkt);
         return AVERROR(EIO);
     }

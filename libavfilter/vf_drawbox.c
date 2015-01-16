@@ -66,7 +66,7 @@ enum var_name {
     VARS_NB
 };
 
-typedef struct {
+typedef struct DrawBoxContext {
     const AVClass *class;
     int x, y, w, h;
     int thickness;
@@ -271,7 +271,7 @@ static const AVFilterPad drawbox_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vf_drawbox = {
+AVFilter ff_vf_drawbox = {
     .name          = "drawbox",
     .description   = NULL_IF_CONFIG_SMALL("Draw a colored box on the input video."),
     .priv_size     = sizeof(DrawBoxContext),
@@ -377,7 +377,7 @@ static const AVFilterPad drawgrid_outputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vf_drawgrid = {
+AVFilter ff_vf_drawgrid = {
     .name          = "drawgrid",
     .description   = NULL_IF_CONFIG_SMALL("Draw a colored grid on the input video."),
     .priv_size     = sizeof(DrawBoxContext),

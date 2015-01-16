@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001-2003 The ffmpeg Project
+ * Copyright (c) 2001-2003 The FFmpeg Project
  *
  * first version by Francois Revol (revol@free.fr)
  * fringe ADPCM codecs (e.g., DK3, DK4, Westwood)
@@ -555,17 +555,16 @@ static int get_nb_samples(AVCodecContext *avctx, GetByteContext *gb,
         case AV_CODEC_ID_ADPCM_EA_R2:
             header_size    = 4 + 5 * ch;
             *coded_samples = bytestream2_get_le32(gb);
-            *approx_nb_samples = 1;
             break;
         case AV_CODEC_ID_ADPCM_EA_R3:
             header_size    = 4 + 5 * ch;
             *coded_samples = bytestream2_get_be32(gb);
-            *approx_nb_samples = 1;
             break;
         }
         *coded_samples -= *coded_samples % 28;
         nb_samples      = (buf_size - header_size) * 2 / ch;
         nb_samples     -= nb_samples % 28;
+        *approx_nb_samples = 1;
         break;
     case AV_CODEC_ID_ADPCM_IMA_DK3:
         if (avctx->block_align > 0)
@@ -1318,7 +1317,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, void *data,
                                                        byte & 0x0F, 4, 0);
             }
         } else if (avctx->codec->id == AV_CODEC_ID_ADPCM_SBPRO_3) {
-            for (n = nb_samples / 3; n > 0; n--) {
+            for (n = (nb_samples<<st) / 3; n > 0; n--) {
                 int byte = bytestream2_get_byteu(&gb);
                 *samples++ = adpcm_sbpro_expand_nibble(&c->status[0],
                                                         byte >> 5        , 3, 0);
@@ -1531,7 +1530,7 @@ static int adpcm_decode_frame(AVCodecContext *avctx, void *data,
 
 static const enum AVSampleFormat sample_fmts_s16[]  = { AV_SAMPLE_FMT_S16,
                                                         AV_SAMPLE_FMT_NONE };
-static const enum AVSampleFormat sample_fmts_s16p[] = { AV_SAMPLE_FMT_S16,
+static const enum AVSampleFormat sample_fmts_s16p[] = { AV_SAMPLE_FMT_S16P,
                                                         AV_SAMPLE_FMT_NONE };
 static const enum AVSampleFormat sample_fmts_both[] = { AV_SAMPLE_FMT_S16,
                                                         AV_SAMPLE_FMT_S16P,

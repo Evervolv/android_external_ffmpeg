@@ -36,7 +36,7 @@
 #include "buffersink.h"
 #include "internal.h"
 
-typedef struct {
+typedef struct BufferSinkContext {
     const AVClass *class;
     AVFifoBuffer *fifo;                      ///< FIFO buffer of video frame references
     unsigned warning_limit;
@@ -76,8 +76,7 @@ static av_cold void uninit(AVFilterContext *ctx)
             av_fifo_generic_read(sink->fifo, &frame, sizeof(frame), NULL);
             av_frame_free(&frame);
         }
-        av_fifo_free(sink->fifo);
-        sink->fifo = NULL;
+        av_fifo_freep(&sink->fifo);
     }
 }
 
@@ -247,7 +246,7 @@ static av_cold int common_init(AVFilterContext *ctx)
 {
     BufferSinkContext *buf = ctx->priv;
 
-    buf->fifo = av_fifo_alloc(FIFO_INIT_SIZE*sizeof(AVFilterBufferRef *));
+    buf->fifo = av_fifo_alloc_array(FIFO_INIT_SIZE, sizeof(AVFilterBufferRef *));
     if (!buf->fifo) {
         av_log(ctx, AV_LOG_ERROR, "Failed to allocate fifo\n");
         return AVERROR(ENOMEM);
@@ -529,7 +528,7 @@ static const AVFilterPad ffbuffersink_inputs[] = {
     { NULL },
 };
 
-AVFilter avfilter_vsink_ffbuffersink = {
+AVFilter ff_vsink_ffbuffersink = {
     .name      = "ffbuffersink",
     .description = NULL_IF_CONFIG_SMALL("Buffer video frames, and make them available to the end of the filter graph."),
     .priv_size = sizeof(BufferSinkContext),
@@ -551,7 +550,7 @@ static const AVFilterPad ffabuffersink_inputs[] = {
     { NULL },
 };
 
-AVFilter avfilter_asink_ffabuffersink = {
+AVFilter ff_asink_ffabuffersink = {
     .name      = "ffabuffersink",
     .description = NULL_IF_CONFIG_SMALL("Buffer audio frames, and make them available to the end of the filter graph."),
     .init_opaque = asink_init,
@@ -573,7 +572,7 @@ static const AVFilterPad avfilter_vsink_buffer_inputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_vsink_buffer = {
+AVFilter ff_vsink_buffer = {
     .name        = "buffersink",
     .description = NULL_IF_CONFIG_SMALL("Buffer video frames, and make them available to the end of the filter graph."),
     .priv_size   = sizeof(BufferSinkContext),
@@ -595,7 +594,7 @@ static const AVFilterPad avfilter_asink_abuffer_inputs[] = {
     { NULL }
 };
 
-AVFilter avfilter_asink_abuffer = {
+AVFilter ff_asink_abuffer = {
     .name        = "abuffersink",
     .description = NULL_IF_CONFIG_SMALL("Buffer audio frames, and make them available to the end of the filter graph."),
     .priv_class  = &abuffersink_class,
